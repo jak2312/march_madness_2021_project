@@ -107,7 +107,7 @@ ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
 enet.fit = train(x,y,
                  method = "glmnet",
                  tuneGrid = expand.grid(alpha = seq(0, 1, length = 15),
-                                         lambda = exp(seq(2, -2, length = 50))),
+                                         lambda = exp(seq(1, -5, length = 50))),
                  trControl = ctrl1)
 
 enet.fit$bestTune
@@ -141,5 +141,18 @@ colnames(test)[16:28] = paste("T2_", colnames(test)[16:28], sep = "")
 MM21_pred = predict(enet.fit, newdata = test)
 
 test1 = cbind(matches, MM21_pred)
+
+find_matchup = function(t1_name, t2_name){
+  test = try(filter(test1, 
+             T1_name == t1_name,
+             T2_name == t2_name), silent = T)
+  
+   if(nrow(test) == 0) {
+     test = try(filter(test1, 
+             T2_name == t1_name,
+             T1_name == t2_name), silent = T)
+   }
+  return(test)
+}
 ```
 
