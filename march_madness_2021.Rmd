@@ -9,12 +9,24 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(caret)
+library(corrplot)
+library(glmnet)
 ```
 
 # Introduction
 
 In this project, we have gotten data from [Kaggle](https://www.kaggle.com/c/ncaam-march-mania-2021), which contains extensive data of regular season games, and conferences for the NCAA Basketball seasons from 2003-2021. Using this data, I would like to predict the potential scores of the upcoming games in the 2021 March Madness Tournament
+
 ```{r gather data, message = F, warning = F}
+og_df =read.csv("./data/ncaam-march-mania-2021/MRegularSeasonDetailedResults.csv") %>% 
+  rename_at(vars(starts_with("W")), ~str_replace(., "W", "T1_")) %>% 
+  rename_at(vars(starts_with("L")), ~str_replace(., "L", "T2_")) %>% 
+  mutate(
+    point_diff = T1_Score - T2_Score
+  ) %>% 
+  select(-Season, -DayNum , -T1_TeamID, -T1_Score, -T2_TeamID, -T2_Score, -T1_Loc, -NumOT)
+
+
 
 #Game-by-Game Data
 df = read.csv("./data/ncaam-march-mania-2021/MRegularSeasonDetailedResults.csv") %>% 
@@ -56,5 +68,78 @@ df = df %>%
 season_df = df %>% 
   group_by(Season, TeamName) %>% 
   summarize_at(vars(Score:point_diff), ~mean(.x))
+
+#2020 Avg Season Data for each team (used as input for predictions)
+
+MM21_teams = c("Gonzaga", "Baylor", "Illinois", "Michigan", "Alabama", "Ohio St", "Iowa", "Houston", 
+               "Arkansas", "West Virginia", "Texas", "Kansas", "Florida St", "Purdue", "Oklahoma St", "Virginia",
+               "Creighton", "Villanova", "Tennessee", "Colorado", "USC", "Texas Tech", "BYU", "San Diego St", 
+               "Oregon", "Connecticut", "Clemson", "Florida", "LSU", "Loyola-Chicago", "North Carolina", "Oklahoma",
+               "Missouri", "Georgia Tech", "Wisconsin", "Maryland", "St Bonaventure", "Virginia Tech", "VCU", "Rutgers",
+               "Syracuse", "Utah St", "Michigan St", "UCLA", "Wichita St", "Oregon St", "Georgetown", "Drake",
+               "Winthrop", "UC Santa Barbara", "Ohio", "North Texas", "Liberty", "UNC Greensboro", "Abilene Chr", "Morehead St",
+               "Colgate", "E Washington", "Grand Canyon", "Cleveland St", "Oral Roberts", "Iona", "Drexel", "Hartford",
+               "Mt St Mary's", "TX Southern", "Norfolk St", "Appalachian St")
+
+season_20_tstat = season_df %>% 
+  filter(Season == 2020,
+         TeamName %in% MM21_teams) %>% 
+  ungroup() %>% 
+  select(-Season, -Score, -point_diff)
+
+
+```
+
+```{r}
+set.seed(2021)
+
+og_df2 = model.matrix(point_diff ~ ., og_df)[, -1]
+
+trainRows = createDataPartition(y = og_df$point_diff, p = 0.8, list = F)
+
+x = og_df2[trainRows,]
+
+y = og_df$point_diff[trainRows]
+
+
+ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
+
+enet.fit = train(x,y,
+                 method = "glmnet",
+                 tuneGrid = expand.grid(alpha = seq(0, 1, length = 15),
+                                         lambda = exp(seq(2, -2, length = 50))),
+                 trControl = ctrl1)
+
+enet.fit$bestTune
+
+coef(enet.fit$finalModel, enet.fit$bestTune$lambda)
+
+enet.pred = predict(enet.fit, newdata = og_df2[-trainRows,])
+
+mean((enet.pred - og_df$point_diff[-trainRows])^2)
+
+
+```
+
+```{r}
+#Generate 2021 Match-ups (assuming every team will play each other)
+matches = t(combn(MM21_teams, 2)) %>% 
+  as.data.frame() %>% 
+  rename(
+    T1_name = V1,
+    T2_name = V2
+  )
+
+test = left_join(matches, season_20_tstat, by = c("T1_name" = "TeamName"))
+
+colnames(test)[3:15] = paste("T1_", colnames(test)[3:15], sep = "")
+
+test = left_join(test, season_20_tstat, by = c("T2_name" = "TeamName"))
+  
+colnames(test)[16:28] = paste("T2_", colnames(test)[16:28], sep = "")
+
+MM21_pred = predict(enet.fit, newdata = test)
+
+test1 = cbind(matches, MM21_pred)
 ```
 
