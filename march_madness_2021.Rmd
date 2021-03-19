@@ -29,28 +29,28 @@ og_df =read.csv("./data/ncaam-march-mania-2021/MRegularSeasonDetailedResults.csv
 
 
 #Game-by-Game Data
-df = read.csv("./data/ncaam-march-mania-2021/MRegularSeasonDetailedResults.csv") %>% 
-  rowid_to_column("game_id") %>% 
-   relocate(WLoc:NumOT, .after = DayNum) %>% 
+df = read.csv("./data/ncaam-march-mania-2021/MRegularSeasonDetailedResults.csv") %>%
+  rowid_to_column("game_id") %>%
+   relocate(WLoc:NumOT, .after = DayNum) %>%
   mutate(
     Wpoint_diff = WScore - LScore,
     Lpoint_diff = LScore - WScore
-  )%>% 
+  )%>%
   pivot_longer(
     WTeamID:Lpoint_diff,
     names_to = "stat",
     values_to = "count"
-  ) %>% 
+  ) %>%
   mutate(outcome = case_when(
-    str_detect(stat, "^W") ~ "win", 
+    str_detect(stat, "^W") ~ "win",
     str_detect(stat, "^L") ~ "loss"
-  )) %>% 
-  mutate(stat = substr(stat, 2, nchar(stat))) %>% 
+  )) %>%
+  mutate(stat = substr(stat, 2, nchar(stat))) %>%
   pivot_wider(
     names_from = stat,
     values_from = count
-  ) %>% 
-  mutate(TeamID = as.factor(TeamID)) %>% 
+  ) %>%
+  mutate(TeamID = as.factor(TeamID)) %>%
   unnest()
   
 team_id = read.csv("./data/ncaam-march-mania-2021/MTeams.csv") %>% 
@@ -130,17 +130,17 @@ matches = t(combn(MM21_teams, 2)) %>%
     T2_name = V2
   )
 
-test = left_join(matches, season_20_tstat, by = c("T1_name" = "TeamName"))
+matches = left_join(matches, season_20_tstat, by = c("T1_name" = "TeamName"))
 
-colnames(test)[3:15] = paste("T1_", colnames(test)[3:15], sep = "")
+colnames(matches)[3:15] = paste("T1_", colnames(matches)[3:15], sep = "")
 
-test = left_join(test, season_20_tstat, by = c("T2_name" = "TeamName"))
+matches = left_join(matches, season_20_tstat, by = c("T2_name" = "TeamName"))
   
-colnames(test)[16:28] = paste("T2_", colnames(test)[16:28], sep = "")
+colnames(matches)[16:28] = paste("T2_", colnames(matches)[16:28], sep = "")
 
-MM21_pred = predict(enet.fit, newdata = test)
+MM21_pred = predict(enet.fit, newdata = matches)
 
-test1 = cbind(matches, MM21_pred)
+test1 = cbind(matches[1:2], MM21_pred)
 
 find_matchup = function(t1_name, t2_name){
   test = try(filter(test1, 
@@ -154,5 +154,86 @@ find_matchup = function(t1_name, t2_name){
    }
   return(test)
 }
+```
+
+# Using Four Factors
+
+Shooting - Effective Field Goal Percentage (eFG%) = (FGM + 0.5 * FGM3) / FGA
+
+Turnovers - Turnover Percentage (TOV%) = (TOV / (FGA + 0.44 * FTA + TOV)
+
+Rebounding - Rebound Percentage (OR% and DR%):
+  OR% = OR / (OR + Opp DR)
+  DR% = DR / (DR + Opp OR)Free Throws = FTM / FGA
+  
+Free Throws - Free Throw Percentage (FT%) = FTA / FTM
+```{r}
+ff_df = read.csv("./data/ncaam-march-mania-2021/MRegularSeasonDetailedResults.csv") %>% 
+  rename_at(vars(starts_with("W")), ~str_replace(., "W", "T1_")) %>% 
+  rename_at(vars(starts_with("L")), ~str_replace(., "L", "T2_")) %>% 
+  mutate(
+    point_diff = T1_Score - T2_Score
+  )
+
+ff_df[["T1_TeamID"]] = team_id[match(ff_df[["T1_TeamID"]], team_id[["TeamID"]]) , "TeamName"]
+ff_df[["T2_TeamID"]] = team_id[match(ff_df[["T2_TeamID"]], team_id[["TeamID"]]) , "TeamName"]
+
+get_summed_stats = function(teamName){
+  
+  df1 = ff_df %>% 
+    filter(T1_TeamID == teamName) %>% 
+    group_by(Season) %>% 
+    summarize(
+      sum_o.fgm = sum(T1_FGM),
+      sum_o.fgm3 = sum(T1_FGM3),
+      sum_o.fga = sum(T1_FGA, T1_FGA3),
+      sum_o.or = sum(T1_OR),
+      sum_o.df = sum(T1_DR),
+      sum_o.to = sum(T1_TO),
+      sum_o.ftm = sum(T1_FTM),
+      sum_o.fta = sum(T1_FTA),
+      sum_d.fgm = sum(T2_FGM),
+      sum_d.fgm3 = sum(T2_FGM3),
+      sum_d.fga = sum(T2_FGA, T2_FGA3),
+      sum_d.or = sum(T2_OR),
+      sum_d.df = sum(T2_DR),
+      sum_d.to = sum(T2_TO),
+      sum_d.ftm = sum(T2_FTM),
+      sum_d.fta = sum(T2_FTA)      
+  )
+  
+  df2 = ff_df %>% 
+    filter(T2_TeamID == teamName) %>% 
+    group_by(Season) %>% 
+    summarize(
+      sum_o.fgm = sum(T2_FGM),
+      sum_o.fgm3 = sum(T2_FGM3),
+      sum_o.fga = sum(T2_FGA, T2_FGA3),
+      sum_o.or = sum(T2_OR),
+      sum_o.df = sum(T2_DR),
+      sum_o.to = sum(T2_TO),
+      sum_o.ftm = sum(T2_FTM),
+      sum_o.fta = sum(T2_FTA),
+      sum_d.fgm = sum(T1_FGM),
+      sum_d.fgm3 = sum(T1_FGM3),
+      sum_d.fga = sum(T1_FGA, T1_FGA3),
+      sum_d.or = sum(T1_OR),
+      sum_d.df = sum(T1_DR),
+      sum_d.to = sum(T1_TO),
+      sum_d.ftm = sum(T1_FTM),
+      sum_d.fta = sum(T1_FTA)      
+  )
+  
+  rbind(df1,df2) %>% 
+    group_by(Season) %>% 
+    summarize_all(sum)
+}
+
+
+ff_df2 = data.frame(TeamName = rep(MM21_teams, 18)) %>% 
+  mutate(
+    Season = rep(seq(2003, 2020, 1), 68)
+  )
+
 ```
 
