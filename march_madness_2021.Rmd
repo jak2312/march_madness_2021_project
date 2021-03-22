@@ -118,7 +118,6 @@ enet.pred = predict(enet.fit, newdata = og_df2[-trainRows,])
 
 mean((enet.pred - og_df$point_diff[-trainRows])^2)
 
-
 ```
 
 ```{r}
@@ -164,7 +163,7 @@ Turnovers - Turnover Percentage (TOV%) = (TOV / (FGA + 0.44 * FTA + TOV)
 
 Rebounding - Rebound Percentage (OR% and DR%):
   OR% = OR / (OR + Opp DR)
-  DR% = DR / (DR + Opp OR)Free Throws = FTM / FGA
+  DR% = DR / (DR + Opp OR)
   
 Free Throws - Free Throw Percentage (FT%) = FTA / FTM
 ```{r}
@@ -188,7 +187,7 @@ get_summed_stats = function(teamName){
       sum_o.fgm3 = sum(T1_FGM3),
       sum_o.fga = sum(T1_FGA, T1_FGA3),
       sum_o.or = sum(T1_OR),
-      sum_o.df = sum(T1_DR),
+      sum_o.dr = sum(T1_DR),
       sum_o.to = sum(T1_TO),
       sum_o.ftm = sum(T1_FTM),
       sum_o.fta = sum(T1_FTA),
@@ -196,7 +195,7 @@ get_summed_stats = function(teamName){
       sum_d.fgm3 = sum(T2_FGM3),
       sum_d.fga = sum(T2_FGA, T2_FGA3),
       sum_d.or = sum(T2_OR),
-      sum_d.df = sum(T2_DR),
+      sum_d.dr = sum(T2_DR),
       sum_d.to = sum(T2_TO),
       sum_d.ftm = sum(T2_FTM),
       sum_d.fta = sum(T2_FTA)      
@@ -210,7 +209,7 @@ get_summed_stats = function(teamName){
       sum_o.fgm3 = sum(T2_FGM3),
       sum_o.fga = sum(T2_FGA, T2_FGA3),
       sum_o.or = sum(T2_OR),
-      sum_o.df = sum(T2_DR),
+      sum_o.dr = sum(T2_DR),
       sum_o.to = sum(T2_TO),
       sum_o.ftm = sum(T2_FTM),
       sum_o.fta = sum(T2_FTA),
@@ -218,7 +217,7 @@ get_summed_stats = function(teamName){
       sum_d.fgm3 = sum(T1_FGM3),
       sum_d.fga = sum(T1_FGA, T1_FGA3),
       sum_d.or = sum(T1_OR),
-      sum_d.df = sum(T1_DR),
+      sum_d.dr = sum(T1_DR),
       sum_d.to = sum(T1_TO),
       sum_d.ftm = sum(T1_FTM),
       sum_d.fta = sum(T1_FTA)      
@@ -229,11 +228,56 @@ get_summed_stats = function(teamName){
     summarize_all(sum)
 }
 
+summed_season_df = c()
+for(i in MM21_teams){
+  stats = get_summed_stats(i) %>% 
+    mutate(
+      teamName = i
+    )
+  
+  summed_season_df = rbind(summed_season_df, stats)
+}
 
-ff_df2 = data.frame(TeamName = rep(MM21_teams, 18)) %>% 
+summed_season_df = summed_season_df %>% 
+  dplyr::select(teamName, everything()) %>% 
   mutate(
-    Season = rep(seq(2003, 2020, 1), 68)
-  )
+    o.efg = (sum_o.fgm + 0.5 * sum_o.fgm3) / sum_o.fga,
+    d.efg = (sum_d.fgm + 0.5 * sum_d.fgm3) / sum_d.fga,
+    o.to = sum_o.to / (sum_o.fga + 0.44 * sum_o.fta + sum_o.to),
+    d.to = sum_d.to / (sum_d.fga + 0.44 * sum_d.fta + sum_d.to),
+    or = sum_o.or / (sum_o.or + sum_d.dr),
+    dr = sum_o.dr / (sum_o.dr + sum_d.or),
+    ft = sum_o.ftm / sum_o.fta
+  ) %>% 
+  select(Season, teamName, o.efg:ft)
 
+ff_train_df = ff_df %>% 
+  mutate(
+    T1_o.efg = (T1_FGM + 0.5 * T1_FGM3) / (T1_FGA + T1_FGA3),
+    T1_d.efg = (T2_FGM + 0.5 * T2_FGM3) / (T2_FGA + T2_FGA3),
+    T1_o.to = T1_TO / (T1_FGA + 0.44 * T1_FTA + T1_TO),
+    T1_or = (T1_OR / T1_OR + T2_DR),
+    T1_dr = (T1_DR / T1_DR + T2_OR),
+    T1_ft = T1_FTM / T1_FTA,
+    T2_o.efg = (T2_FGM + 0.5 * T2_FGM3) / (T2_FGA + T2_FGA3),
+    T2_d.efg = (T1_FGM + 0.5 * T1_FGM3) / (T1_FGA + T1_FGA3),
+    T2_o.to = T2_TO / (T2_FGA + 0.44 * T2_FTA + T2_TO),
+    T2_or = (T2_OR / T2_OR + T1_DR),
+    T2_dr = (T2_DR / T2_DR + T1_OR),
+    T2_ft = T2_FTM / T2_FTA,
+  ) %>% 
+  select(T1_o.efg:T2_ft, point_diff) %>% 
+  na.omit()
+
+set.seed(2021)
+
+ff_df2 = model.matrix(point_diff ~ ., ff_train_df)[, -1]
+
+trainRows = createDataPartition(y = ff_train_df$point_diff, p = 0.8, list = F)
+
+x = ff_df2[trainRows,]
+
+y = ff_train_df$point_diff[trainRows]
+
+lm.fourfactors = lm(point_diff ~ ., data = ff_train_df)
 ```
-
