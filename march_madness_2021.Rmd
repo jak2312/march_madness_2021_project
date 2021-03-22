@@ -281,3 +281,43 @@ y = ff_train_df$point_diff[trainRows]
 
 lm.fourfactors = lm(point_diff ~ ., data = ff_train_df)
 ```
+
+```{r}
+ff_season_20_tstat = summed_season_df %>% 
+  filter(Season == 2020) %>% 
+  dplyr::select(-Season)
+
+ff_matches = t(combn(MM21_teams, 2)) %>% 
+  as.data.frame() %>% 
+  rename(
+    T1_name = V1,
+    T2_name = V2
+  )
+
+ff_matches = left_join(ff_matches, ff_season_20_tstat, by = c("T1_name" = "teamName"))
+
+colnames(ff_matches)[3:9] = paste("T1_", colnames(ff_matches)[3:9], sep = "")
+
+ff_matches = left_join(ff_matches, ff_season_20_tstat, by = c("T2_name" = "teamName"))
+  
+colnames(ff_matches)[10:16] = paste("T2_", colnames(ff_matches)[10:16], sep = "")
+
+ff_MM21_pred = predict(lm.fourfactors, newdata = ff_matches)
+
+test2 = cbind(ff_matches[1:2], ff_MM21_pred)
+
+ff.find_matchup = function(t1_name, t2_name){
+  test = try(filter(test2, 
+             T1_name == t1_name,
+             T2_name == t2_name), silent = T)
+  
+   if(nrow(test) == 0) {
+     test = try(filter(test2, 
+             T2_name == t1_name,
+             T1_name == t2_name), silent = T)
+   }
+  return(test)
+}
+
+```
+
