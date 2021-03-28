@@ -128,7 +128,7 @@ df = df %>%
   )
 ```
 
-```{r, echo=F, warning=F}
+```{r, echo=F, warning=F, fig.width= 5, fig.height= 3}
 #Box plot of percentage fg, fg3, and ft by win/loss
 plot_fg = df %>% 
   ggplot(aes(x = outcome, y = FG.perc)) + 
@@ -147,7 +147,7 @@ plot_fg + plot_fg3 + plot_ft
 
 The results from these box plots is no surprise, the team that is consistently scoring more wins the games as indicated by the higher average across the 3 variables for the winning teams. 
 
-```{r}
+```{r, echo = F, fig.width= 5, fig.height= 3 }
 #Box plot of attempted fg, fg3, and ft by win/loss
 plot_fga = df %>% 
   ggplot(aes(x = outcome, y = FGA)) + 
@@ -167,7 +167,7 @@ plot_fga + plot_fga3 + plot_fta
 
 The results from these variables were very interesting. It shows that for 2 and 3 point shots, the losing team will, on average, have more shots attempted. However these averages are extremely close to each other, so it is hard to pull any conclusive evidence from these box plots. As for free throws, the winning team seems to have more free throws attempted, which makes sense as they're are likely being fouled more given more attempts at making extra points.
 
-```{r, echo=F}
+```{r, echo=F, fig.width= 5, fig.height= 3}
 #Box plot of offensive and defensive rebounds by win/loss
 
 plot_or = df %>% 
@@ -184,7 +184,7 @@ plot_or + plot_dr
 
 For offensive and defensive rebounds, we see opposite results. Interestingly the losing team will have more offensive rebounds. I can speculate that this is because they're missing shots and recovering the ball more. As for defensive rebounds, the winning team will typically have more defensive rebounds. 
 
-```{r, echo=F}
+```{r, echo=F, fig.width= 5, fig.height= 3}
 #Box plot of timeouts, steals, and blocks by win/loss
 plot_to = df %>% 
   ggplot(aes(x = outcome, y = TO)) + 
@@ -231,6 +231,7 @@ ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
 
 ```
 
+## Ridge
 ```{r, echo=F}
 #Ridge 
 set.seed(2021)
@@ -243,7 +244,7 @@ ridge.fit = train(x,y,
 
 ridge.fit$bestTune
 
-plot(ridge.fit, xTrans = log)
+#plot(ridge.fit, xTrans = log)
 
 ridge.pred = predict(ridge.fit, newdata = og_df2[-trainRows,])
 
@@ -251,6 +252,7 @@ ridge.rmse = mean((ridge.pred - og_df$point_diff[-trainRows])^2)
 
 ```
 
+## Lasso
 ```{r, echo=F}
 #LASSO
 set.seed(2021)
@@ -263,14 +265,14 @@ lasso.fit = train(x,y,
 
 lasso.fit$bestTune
 
-plot(lasso.fit, xTrans = log)
+#plot(lasso.fit, xTrans = log)
 
 lasso.pred = predict(lasso.fit, newdata = og_df2[-trainRows,])
 
 lasso.rmse = mean((lasso.pred - og_df$point_diff[-trainRows])^2)
 
 ```
-
+## Elastic Net
 ```{r, echo=F}
 #Elastic Net
 set.seed(2021)
