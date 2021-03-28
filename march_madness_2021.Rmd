@@ -39,7 +39,7 @@ In order to build a model to output point differential of a game, I would first 
 
 For exploratory data analysis, the data was manipulated so that instead of having 1 game with two team data, each row will correspond to 1 team and a game they played during a specified season and day. Using this data, it will be easier to explore factors that could lead to team wins or losses.
 
-```{r gather data, message = F, warning = F}
+```{r gather data, message = F, warning = F, echo=F}
 
 #Originial data --- used for model building
 og_df =read.csv("./data/ncaam-march-mania-2021/MRegularSeasonDetailedResults.csv") %>% 
@@ -119,7 +119,7 @@ season_20_tstat = season_df %>%
 # Exploratory Data Analysis
 
 In a game of basketball obviously the team that scores the most points wins, so I did not think it would be necessary to compare the outcomes of games based on how many field goals, or 3-pointers, or free throws a team makes, because it is obviously the winning team will have higher stats. Instead, I will look at percentages made for each of those, as well as explore if the number of attempts of field goals, 3-pointers, or free throws has an obvious impact. I will also make a box plot for each of the other factors: offensive rebounds, defensive rebounds, time outs, steals, and blocks.
-```{r}
+```{r, echo=F}
 df = df %>% 
   mutate(
     FG.perc = FGM/FGA,
@@ -128,7 +128,7 @@ df = df %>%
   )
 ```
 
-```{r}
+```{r, echo=F, warning=F}
 #Box plot of percentage fg, fg3, and ft by win/loss
 plot_fg = df %>% 
   ggplot(aes(x = outcome, y = FG.perc)) + 
@@ -167,7 +167,7 @@ plot_fga + plot_fga3 + plot_fta
 
 The results from these variables were very interesting. It shows that for 2 and 3 point shots, the losing team will, on average, have more shots attempted. However these averages are extremely close to each other, so it is hard to pull any conclusive evidence from these box plots. As for free throws, the winning team seems to have more free throws attempted, which makes sense as they're are likely being fouled more given more attempts at making extra points.
 
-```{r}
+```{r, echo=F}
 #Box plot of offensive and defensive rebounds by win/loss
 
 plot_or = df %>% 
@@ -184,7 +184,7 @@ plot_or + plot_dr
 
 For offensive and defensive rebounds, we see opposite results. Interestingly the losing team will have more offensive rebounds. I can speculate that this is because they're missing shots and recovering the ball more. As for defensive rebounds, the winning team will typically have more defensive rebounds. 
 
-```{r}
+```{r, echo=F}
 #Box plot of timeouts, steals, and blocks by win/loss
 plot_to = df %>% 
   ggplot(aes(x = outcome, y = TO)) + 
@@ -213,8 +213,8 @@ I will create 3 models that are well-known for the ability to select variables t
 
 The tuning parameters for each model will be selected by repeated cross-validation, and the parameters with the smallest RMSE will be the chosen tune for the model. 
 
-The predictor variables for all models include the following stats from each game from the 2003 to 2020 season: field goals made and attempted, 3-pointers made and attempted, free throws made and attempted, offensive rebounds, defensive rebounds, assists, timeouts, steals, blocks, and personal fouls for each team. 
-```{r}
+The predictor variables for all models include the following stats from each game from the 2003 to 2020 season: field goals made and attempted, 3-pointers made and attempted, free throws made and attempted, offensive rebounds, defensive rebounds, assists, timeouts, steals, blocks, and personal fouls for each team. The output value is estimated point differential of the game (T1 score - T2 score). This output inherently carries the estimation of who will win the game as well.
+```{r, echo=F}
 #Create input and output for models
 set.seed(2021)
 
@@ -231,7 +231,7 @@ ctrl1 = trainControl(method = "repeatedcv", number = 10, repeats = 5)
 
 ```
 
-```{r}
+```{r, echo=F}
 #Ridge 
 set.seed(2021)
 
@@ -251,7 +251,7 @@ ridge.rmse = mean((ridge.pred - og_df$point_diff[-trainRows])^2)
 
 ```
 
-```{r}
+```{r, echo=F}
 #LASSO
 set.seed(2021)
 
@@ -271,7 +271,7 @@ lasso.rmse = mean((lasso.pred - og_df$point_diff[-trainRows])^2)
 
 ```
 
-```{r}
+```{r, echo=F}
 #Elastic Net
 set.seed(2021)
 enet.fit = train(x,y,
@@ -287,17 +287,13 @@ enet.fit$bestTune
 # log(enet.fit$bestTune[,2]) 
 #not an edge case, good to continue
 
-plot(enet.fit, xTrans = log)
-
-coef(enet.fit$finalModel, enet.fit$bestTune$lambda)
-
 enet.pred = predict(enet.fit, newdata = og_df2[-trainRows,])
 
 enet.rmse = mean((enet.pred - og_df$point_diff[-trainRows])^2)
 
 ```
 
-```{r}
+```{r, echo=F}
 set.seed(2021)
 
 resamp = resamples(list(enet = enet.fit, lasso = lasso.fit, ridge = ridge.fit))
@@ -314,7 +310,12 @@ When comparing the model's RMSE from the 20% of data partitioned to be the testi
 
 In order to make these predictions, I first have to generate the input data, which is every single possible match-up of the tournament, as well as impute team stats for the model to use. Because the training data was able to use stats from those games that were recorded a posteriori. I chose to use average team stats from the 2020 regular season as a comparison. My concept is to expect that every game these teams will play in the tournament, they will have an average performance relative to their regular season.
 
-```{r}
+```{r, echo=F}
+coef(enet.fit$finalModel, enet.fit$bestTune$lambda)
+```
+
+
+```{r, echo=F}
 #Generate 2021 Match-ups (assuming every team will play each other)
 matches = t(combn(MM21_teams, 2)) %>% 
   as.data.frame() %>% 
@@ -352,169 +353,14 @@ find_matchup = function(t1_name, t2_name){
 }
 ```
 
-# Using Four Factors
+# Results of Tournament
 
-Shooting - Effective Field Goal Percentage (eFG%) = (FGM + 0.5 * FGM3) / FGA
+As of now, there are still 12 games left in the tournament, when the tournament concludes I will report the final performance of the model. As of now, including the first 4 games of the 8 teams which had to play to make it to the official tournament, the model had predicted the correct winning team 37 times out of 54 games which is a 68.5% correct results. Unfortunately, the point differential output has been all over the place, and I will likely calculate an overall RMSE once the tournament concludes for point differential.
 
-Turnovers - Turnover Percentage (TOV%) = (TOV / (FGA + 0.44 * FTA + TOV)
+Because of the nature of the input data, I'm not shocked that the model would not have an accurate point differential output to what has been happening in the tournament. However, I'm extremely satisfied with how the model performed as far as estimating the winning team. The biggest issue with the input data is that if a team in the tournament has only played lower tier teams during the regular season, they're likely to have inflated game statistics in their favor, making the model more heavily favor the team.
 
-Rebounding - Rebound Percentage (OR% and DR%):
-  OR% = OR / (OR + Opp DR)
-  DR% = DR / (DR + Opp OR)
-  
-Free Throws - Free Throw Percentage (FT%) = FTA / FTM
-```{r}
-ff_df = read.csv("./data/ncaam-march-mania-2021/MRegularSeasonDetailedResults.csv") %>% 
-  rename_at(vars(starts_with("W")), ~str_replace(., "W", "T1_")) %>% 
-  rename_at(vars(starts_with("L")), ~str_replace(., "L", "T2_")) %>% 
-  mutate(
-    point_diff = T1_Score - T2_Score
-  )
+# Conclusion
 
-ff_df[["T1_TeamID"]] = team_id[match(ff_df[["T1_TeamID"]], team_id[["TeamID"]]) , "TeamName"]
-ff_df[["T2_TeamID"]] = team_id[match(ff_df[["T2_TeamID"]], team_id[["TeamID"]]) , "TeamName"]
+Out of this project, I just wanted to make a model that chose the winning team more than 50% of the time (which would be equivalent to randomly guessing). I am more than shocked with the results of the model and am extremely happy with the results so far. In the future I would like to figure out a method to scale the data to account for opposing team performance. I.e. if the opposing team did not play well, the winning team's stats would be scaled down somewhat.
 
-get_summed_stats = function(teamName){
-  
-  df1 = ff_df %>% 
-    filter(T1_TeamID == teamName) %>% 
-    group_by(Season) %>% 
-    summarize(
-      sum_o.fgm = sum(T1_FGM),
-      sum_o.fgm3 = sum(T1_FGM3),
-      sum_o.fga = sum(T1_FGA, T1_FGA3),
-      sum_o.or = sum(T1_OR),
-      sum_o.dr = sum(T1_DR),
-      sum_o.to = sum(T1_TO),
-      sum_o.ftm = sum(T1_FTM),
-      sum_o.fta = sum(T1_FTA),
-      sum_d.fgm = sum(T2_FGM),
-      sum_d.fgm3 = sum(T2_FGM3),
-      sum_d.fga = sum(T2_FGA, T2_FGA3),
-      sum_d.or = sum(T2_OR),
-      sum_d.dr = sum(T2_DR),
-      sum_d.to = sum(T2_TO),
-      sum_d.ftm = sum(T2_FTM),
-      sum_d.fta = sum(T2_FTA)      
-  )
-  
-  df2 = ff_df %>% 
-    filter(T2_TeamID == teamName) %>% 
-    group_by(Season) %>% 
-    summarize(
-      sum_o.fgm = sum(T2_FGM),
-      sum_o.fgm3 = sum(T2_FGM3),
-      sum_o.fga = sum(T2_FGA, T2_FGA3),
-      sum_o.or = sum(T2_OR),
-      sum_o.dr = sum(T2_DR),
-      sum_o.to = sum(T2_TO),
-      sum_o.ftm = sum(T2_FTM),
-      sum_o.fta = sum(T2_FTA),
-      sum_d.fgm = sum(T1_FGM),
-      sum_d.fgm3 = sum(T1_FGM3),
-      sum_d.fga = sum(T1_FGA, T1_FGA3),
-      sum_d.or = sum(T1_OR),
-      sum_d.dr = sum(T1_DR),
-      sum_d.to = sum(T1_TO),
-      sum_d.ftm = sum(T1_FTM),
-      sum_d.fta = sum(T1_FTA)      
-  )
-  
-  rbind(df1,df2) %>% 
-    group_by(Season) %>% 
-    summarize_all(sum)
-}
-
-summed_season_df = c()
-for(i in MM21_teams){
-  stats = get_summed_stats(i) %>% 
-    mutate(
-      teamName = i
-    )
-  
-  summed_season_df = rbind(summed_season_df, stats)
-}
-
-summed_season_df = summed_season_df %>% 
-  dplyr::select(teamName, everything()) %>% 
-  mutate(
-    o.efg = (sum_o.fgm + 0.5 * sum_o.fgm3) / sum_o.fga,
-    d.efg = (sum_d.fgm + 0.5 * sum_d.fgm3) / sum_d.fga,
-    o.to = sum_o.to / (sum_o.fga + 0.44 * sum_o.fta + sum_o.to),
-    d.to = sum_d.to / (sum_d.fga + 0.44 * sum_d.fta + sum_d.to),
-    or = sum_o.or / (sum_o.or + sum_d.dr),
-    dr = sum_o.dr / (sum_o.dr + sum_d.or),
-    ft = sum_o.ftm / sum_o.fta
-  ) %>% 
-  select(Season, teamName, o.efg:ft)
-
-ff_train_df = ff_df %>% 
-  mutate(
-    T1_o.efg = (T1_FGM + 0.5 * T1_FGM3) / (T1_FGA + T1_FGA3),
-    T1_d.efg = (T2_FGM + 0.5 * T2_FGM3) / (T2_FGA + T2_FGA3),
-    T1_o.to = T1_TO / (T1_FGA + 0.44 * T1_FTA + T1_TO),
-    T1_or = (T1_OR / T1_OR + T2_DR),
-    T1_dr = (T1_DR / T1_DR + T2_OR),
-    T1_ft = T1_FTM / T1_FTA,
-    T2_o.efg = (T2_FGM + 0.5 * T2_FGM3) / (T2_FGA + T2_FGA3),
-    T2_d.efg = (T1_FGM + 0.5 * T1_FGM3) / (T1_FGA + T1_FGA3),
-    T2_o.to = T2_TO / (T2_FGA + 0.44 * T2_FTA + T2_TO),
-    T2_or = (T2_OR / T2_OR + T1_DR),
-    T2_dr = (T2_DR / T2_DR + T1_OR),
-    T2_ft = T2_FTM / T2_FTA,
-  ) %>% 
-  select(T1_o.efg:T2_ft, point_diff) %>% 
-  na.omit()
-
-set.seed(2021)
-
-ff_df2 = model.matrix(point_diff ~ ., ff_train_df)[, -1]
-
-trainRows = createDataPartition(y = ff_train_df$point_diff, p = 0.8, list = F)
-
-x = ff_df2[trainRows,]
-
-y = ff_train_df$point_diff[trainRows]
-
-lm.fourfactors = lm(point_diff ~ ., data = ff_train_df)
-```
-
-```{r}
-ff_season_20_tstat = summed_season_df %>% 
-  filter(Season == 2020) %>% 
-  dplyr::select(-Season)
-
-ff_matches = t(combn(MM21_teams, 2)) %>% 
-  as.data.frame() %>% 
-  rename(
-    T1_name = V1,
-    T2_name = V2
-  )
-
-ff_matches = left_join(ff_matches, ff_season_20_tstat, by = c("T1_name" = "teamName"))
-
-colnames(ff_matches)[3:9] = paste("T1_", colnames(ff_matches)[3:9], sep = "")
-
-ff_matches = left_join(ff_matches, ff_season_20_tstat, by = c("T2_name" = "teamName"))
-  
-colnames(ff_matches)[10:16] = paste("T2_", colnames(ff_matches)[10:16], sep = "")
-
-ff_MM21_pred = predict(lm.fourfactors, newdata = ff_matches)
-
-test2 = cbind(ff_matches[1:2], ff_MM21_pred)
-
-ff.find_matchup = function(t1_name, t2_name){
-  test = try(filter(test2, 
-             T1_name == t1_name,
-             T2_name == t2_name), silent = T)
-  
-   if(nrow(test) == 0) {
-     test = try(filter(test2, 
-             T2_name == t1_name,
-             T1_name == t2_name), silent = T)
-   }
-  return(test)
-}
-
-```
-
+I was overall surprised by the variables the model chose and how they impacted the estimations. The most influencing variables were the amount of baskets scored, and the amount of attempts were driven down to zero. I was surprised to see that offensive rebound were also driven down to zero and most shocked by how the model placed a negative coefficient for time outs -- meaning that a team that is calling a time out will negatively impact their score. 
